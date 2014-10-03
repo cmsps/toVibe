@@ -1,0 +1,303 @@
+#!/bin/bash
+#
+# toVibe [ -or ] dir ... - copy MP3s in dir to
+#                          /run/media/$LOGNAME/vibe/Music/dir
+#
+# Sun Jun 8 11:57:40 BST 2014
+#
+
+<<'______________D__O__C__U__M__E__N__T__A__T__I__O__N_____________'
+
+Copyright (C) 2014 Peter Scott - p.scott@shu.ac.uk
+
+Licence
+=======
+   This program is free software: you can redistribute it and/or modify
+   it under the terms of the GNU General Public License as published
+   by the Free Software Foundation, either version 3 of the License, or
+   (at your option) any later version.
+
+   This program is distributed in the hope that it will be useful,
+   but WITHOUT ANY WARRANTY; without even the implied warranty of
+   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+   General Public License for more details.
+
+   You should have received a copy of the GNU General Public License
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+Overview
+========
+   `toVibe' takes a directory of MP3s and turns it into a playlist on a
+   mounted Philips Vibe mp3 player.
+
+
+Details
+=======
+   In the following these definitions are used:
+
+        Vibe:           a Philips Vibe mp3 player;
+
+        MP3:           a file containing sound in MP3 format;
+
+
+   `toVibe' copies directories containing MP3s to a mounted Vibe.  The base
+   of the original directory name is used as the directory name in
+   "/Music" on the Vibe.
+
+   If MP3s are added to a directory and it is re-copied, only the new MP3s
+   are copied -- if old files with the same names are still on the Vibe.
+
+   `toVibe' does its tidying whenever it is run; it may be run with
+   no command line parameters to do tidying alone.  Tidying cannot
+   be suppressed.
+
+
+Limitations:
+============
+   o   `toVibe' assumes that your Vibe is already mounted.  If your mount
+       point differs from that of Centos / Gnome, you can edit the "VIBE"
+       constant to suit your setup.
+
+   o   There is no command to delete tracks from the Vibe.  I haven't
+       written one because I only listen to BBC podcasts and I do the
+       deleting on the Vibe.  I delete a track (from "Now playing" after
+       listening to it.
+
+
+Example:
+========
+   $ toVibe "some folder" "/some/where/else/some other folder"
+   $
+
+   would create/update the following files on the Vibe:
+
+          "/Music/some folder"
+          "/Music/some folder/*.mp3"
+          "/Music/some other folder"
+          "/Music/some other folder/*.mp3"
+
+Configuration
+=============
+   I call the script `toVibe' but you can call it whatever you like
+   within reason.
+
+   Edit the following "VIBE" constant to suit yourself
+
+______________D__O__C__U__M__E__N__T__A__T__I__O__N_____________
+
+
+VIBE="/run/media/$LOGNAME/vibe" # usual location for Vibe mounted by
+                                # Centos and Gnome
+
+# usage - display usage message
+#
+usage(){
+  cat <<-! >&2
+	Usage: $NAME [ -hdory ] [ dir ] ...
+
+	Options:
+	     -h  this help
+	     -o  overwrite mp3 files already on the Vibe
+	     -r  remove source mp3 files and directories after copying them
+	!
+  exit 1
+}
+
+
+# mkTmp - make temp dir and delete it automatically on exit
+#         Eg: mkTmp; ... > $TMP/temp
+#
+mkTmp(){
+  TMP=/tmp/$NAME.$$
+  trap 'rm -fr $TMP 2> /dev/null; exit' 0 1 2 3 4 5 6 7 8 9 10    12 13 14 15
+  mkdir $TMP && return
+  echo " $NAME: couldn't make $TMP directory"  >&2
+  exit 2
+}
+
+
+# checkSimple file - check file is plain, readable, not empty
+#
+checkSimple(){
+  local file=$1
+
+  if [ ! -e "$file" ]
+  then echo "$NAME: \`$file': doesn't exist" >&2
+       return 1
+  elif [ -d "$file" ]
+  then echo "$NAME: \`$file': is a directory" >&2
+       return 2
+  elif [ ! -r "$file" ]
+  then echo "$NAME: \`$file': is not readable" >&2
+       return 3
+  elif [ ! -s "$file" ]
+  then echo "$NAME: \`$file': is empty" >&2
+       return 4
+  fi
+  return 0
+}
+
+
+# mkVibeDir - ensure /Music/baseDir exists on Vibe,
+#
+mkVibeDir(){
+  if [ -d "$vibeDest" ]
+  then :
+  elif [ -e "$vibeDest" ]
+  then echo "$NAME: \`$vibeDest': isn't a directory" >&2
+       exit 3
+  elif ! mkdir "$vibeDest" 2> /dev/null
+  then vibeFull 4
+  fi
+}
+
+
+# vibeFull reason - give reason and abort when can't write to Vibe
+#
+vibeFull(){
+  local reason=$1
+
+  { printf "$NAME: (Vibe full?) "
+    case $reason in
+         4)   echo "\`$vibeDest': can't create directory" ;;
+         5)   echo "\`$item': couldn't copy" ;;
+         *)   echo "\`$reason': unknown reason" ;;
+    esac
+  } >&2
+  exit 4
+}
+
+
+# copyDir dir - copy dir to Vibe
+#
+copyDir(){
+  local dir=$1 mp3Count mp3
+
+  mp3Count=`ls "$dir"/*.[Mm][Pp]3 | wc -l`
+  if [ $mp3Count -eq 0 ]
+  then echo "$NAME: \`$dir': no .mp3/.MP3 files" >&2
+       return 1
+  fi
+  setupFilenames "$dir"
+  mkVibeDir
+  for mp3 in "$dir"/*.[Mm][Pp]3
+  do   copyFile "$mp3"
+  done
+  sortDir Music/$dir
+
+  # remove the copied dir if "optioned"
+  #
+  test "$removeSources" && rmdir "$dir" 2> /dev/null
+}
+
+
+# setupFilenames dir - set global variables based on dir
+#
+setupFilenames(){
+  local dir=$1
+
+  baseDir=`basename "$dir"`
+  vibeDest="$VIBE/Music/$baseDir"
+}
+
+
+# copyFile dir/mp3 - copy mp3 to vibeDest
+#
+copyFile(){
+  local item=$1 file
+
+  checkSimple "$item" || return 0     # not fatal
+  file=`echo "$item" |
+          sed 's?.*/??
+               s/\..*//'`
+  if ls "$vibeDest/$file.mp3" &> /dev/null
+  then if [ ! "$overwrite" ]
+       then echo "$NAME: \`$item': already on the mp3 player" >&2
+            return 0      # not fatal
+       fi
+  fi
+  cp "$item" "$vibeDest/$file.mp3" || vibeFull 5
+
+  # remove the copied file if "optioned"
+  #
+  test "$removeSources" && rm "$item"
+}
+
+
+# checkVibeMounted - check Vibe is mounted
+#
+checkVibeMounted(){
+  if [ ! -e "$VIBE/Music" ]
+  then echo "$NAME: \`$VIBE/Music': doesn't exist (Vibe not mounted?)" >&2
+       exit 6
+  elif [ ! -d "$VIBE/Music" ]
+  then echo "$NAME: \`$VIBE/Music': isn't a directory" >&2
+       exit 7
+  fi
+}
+
+
+# sortDir dir - sort the directory so that the files occur
+#               physically in alphabetical order
+#
+#               (If Philips extracted them alphabetically, we wouldn't
+#               have to bother!)
+#
+sortDir(){
+  local dir=$1
+
+  mkdir "$VIBE/Temp" || vibeFull 3
+  ( cd "$VIBE/$dir"
+    if mv * "$VIBE/Temp" 2> /dev/null
+    then cd $TMP
+         rmdir "$VIBE/$dir"
+         mv "$VIBE/Temp" "$VIBE/$dir"
+    else
+         # put the moved dirs back if we weren't able to move them all
+         #
+         mv "$VIBE/Temp"/* . 2> /dev/null
+         rmdir "$VIBE/Temp"
+    fi
+  )
+}
+
+
+# prevent the user giving the script a name with white space in it
+# -- saving the hassle of quoting internal file names
+#
+NAME=`basename "$0"`
+words=`echo "$NAME" | wc -w`
+if [ $words -ne 1 ]
+then echo "\`$0': I don't allow white space in command names" >&2
+     exit 11
+fi
+
+# process command line options
+#
+while getopts ':hor' option
+do   case $option in
+          h )   usage ;;
+          o )   overwrite=yes ;;
+          r )   removeSources=yes ;;
+         '?')   echo "$NAME: unknown option: \`$OPTARG'" >&2
+                usage ;;
+     esac
+done
+shift $(($OPTIND - 1))
+
+checkVibeMounted
+mkTmp
+rmdir "$VIBE/Music/"* 2> /dev/null              # remove empty dirs on vibe
+for dir
+do   dir=`echo $dir | sed 's?/$??'`   # remove any trailing slash
+     if [ ! -e "$dir" ]
+     then echo "$NAME: \`$dir': doesn't exist" >&2
+     elif [ ! -d "$dir" ]
+     then echo "$NAME: \`$dir': is not a directory" >&2
+     elif ! ls "$dir"/* &> /dev/null
+     then echo "$NAME: \`$dir': is empty" >&2
+     else copyDir "$dir"
+     fi
+done
+sortDir Music
