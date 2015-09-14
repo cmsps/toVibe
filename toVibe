@@ -3,7 +3,7 @@
 # toVibe [ -or ] dir ... - copy MP3s in dir to
 #                          /run/media/$LOGNAME/vibe/Music/dir
 #
-# Mon Jan 12 12:40:02 GMT 2015
+# Sun Feb 15 13:06:30 GMT 2015
 #
 
 <<'______________D__O__C__U__M__E__N__T__A__T__I__O__N_____________'
@@ -28,17 +28,17 @@ Licence
 
 Overview
 ========
-   `toVibe' takes a directory of MP3s and turns it into a playlist on a
-   mounted Philips Vibe mp3 player.
+   `toVibe' takes a directory of MP3s and puts it onto a mounted Philips
+   Vibe mp3 player.
 
 
 Details
 =======
    In the following these definitions are used:
 
-        Vibe:           a Philips Vibe mp3 player;
+        Vibe:  a Philips Vibe mp3 player;
 
-        MP3:           a file containing sound in MP3 format;
+        MP3:   a file containing sound in MP3 format.
 
 
    `toVibe' copies directories containing MP3s to a mounted Vibe.  The base
@@ -174,7 +174,7 @@ vibeFull(){
 copyDir(){
   local dir=$1 mp3Count mp3
 
-  mp3Count=`ls "$dir"/*.[Mm][Pp]3 | wc -l`
+  mp3Count=`ls "$dir"/*.[Mm][Pp]3 2> /dev/null | wc -l`
   if [ $mp3Count -eq 0 ]
   then echo "$NAME: \`$dir': no .mp3/.MP3 files" >&2
        return 1
@@ -219,7 +219,7 @@ copyFile(){
   fi
   cp "$item" "$vibeDest/$file.mp3" || vibeFull 5
 
-  # remove the copied file if "optioned"
+  # remove the copied file if option selected
   #
   test "$removeSources" && rm "$item"
 }
@@ -250,7 +250,7 @@ sortDir(){
   mkdir "$VIBE/Temp" || vibeFull 3
   ( cd "$VIBE/$dir"
     if mv * "$VIBE/Temp" 2> /dev/null
-    then cd $TMP
+    then cd $TMP                        # can't rmdir if we are in it
          rmdir "$VIBE/$dir"
          mv "$VIBE/Temp" "$VIBE/$dir"
     else
