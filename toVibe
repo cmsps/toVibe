@@ -3,7 +3,7 @@
 # toVibe [ -or ] dir ... - copy MP3s in dir to
 #                          /run/media/$LOGNAME/vibe/Music/dir
 #
-# Sun Feb 15 13:06:30 GMT 2015
+# Sun May 21 20:13:44 BST 2017
 #
 
 <<'______________D__O__C__U__M__E__N__T__A__T__I__O__N_____________'
@@ -114,7 +114,7 @@ mkTmp(){
   # Beware of exit from a subshell and losing exit code
   #
   trap 'code=$?; rm -fr $TMP 2> /dev/null; exit $code' \
-                                   HUP INT QUIT ILL ABRT BUS FPE SEGV PIPE TERM
+                              EXIT HUP INT QUIT ILL ABRT BUS FPE SEGV PIPE TERM
   mkdir $TMP && return
   echo "$NAME: couldn't make \`$TMP' directory" >&2
   exit 2
